@@ -34,6 +34,8 @@ document.getElementById('back-button').addEventListener('click', function () {
     // Hide the results frame and show the upload container
     document.querySelector('.container').style.display = 'block';
     document.getElementById('results-frame').style.display = 'none';
+    const resultsElement = document.getElementById('results');
+    resultsElement.textContent = '';
 });
 
 
