@@ -38,12 +38,10 @@ document.getElementById('back-button').addEventListener('click', function () {
     resultsElement.textContent = '';
 });
 
-
 function analyzeICS(icsContent) {
 
     const startTime = performance.now();
 
-    const resultsElement = document.getElementById('results');
     const jcalData = ICAL.parse(icsContent);
     const calendar = new ICAL.Component(jcalData);
     let events = calendar.getAllSubcomponents('vevent');
@@ -51,35 +49,13 @@ function analyzeICS(icsContent) {
     // Sort events by start date
     events = events.map(event => new ICAL.Event(event)).sort((a, b) => a.startDate.toJSDate() - b.startDate.toJSDate());
 
-    console.log(events)
-
     // Filter out past events that were not canceled
     const now = new Date();
     const filteredEvents = events.filter(event => event.status !== "CANCELLED" && event.startDate.toJSDate() <= now);
 
-    // Calculate load time
-    const endTime = performance.now();
-    const elapsedTime = endTime - startTime;
-
     // Display basic information
-    //resultsElement.textContent = `Loaded calendar in ${(elapsedTime/1000).toFixed(2)}s\n`;
-
-    // Example: Get all people from events
     const peopleData = getAllPeople(filteredEvents);
-
-    // Example: Display top hangouts
-    resultsElement.textContent += `Wow you must like these people:\n\n` + show(peopleData, n=10, verbose=false);
-
-    // Perform your analysis with icsData and display the results
-    const results = resultsElement.textContent
-
-    // Show the results frame and hide the upload container
-    document.querySelector('.container').style.display = 'none';
-    const resultsFrame = document.getElementById('results-frame');
-    resultsFrame.style.display = 'block';
-    
-    // Populate the results
-    document.getElementById('results').textContent = results;
+    showChart(peopleData); // Display chart instead of text
 }
 
 function getAllPeople(events) {
@@ -92,19 +68,21 @@ function getAllPeople(events) {
         const end = event.endDate.toJSDate();
         const duration = (end - start) / 3600000; // Duration in hours
         const organizer = getNamesEmails(event, 'organizer').names.join('');
-        const attendee_data = getNamesEmails(event, 'attendee')
+        const attendee_data = getNamesEmails(event, 'attendee');
         const attendees = attendee_data.names.join(', ');
-        const status = findStatus(event, 'lponssen@scu.edu')
-        const event_status = getEventStatus(event)
+        const status = findStatus(event, 'lponssen@scu.edu');
+        const event_status = getEventStatus(event);
 
-        if (event_status === 'CANCELLED' && organizer) {
-            console.log(`${summary}: ${organizer}, ${attendees}`)
+        // Skip events that have no attendees
+        if (attendee_data.names.length === 0) {
+            return;
         }
 
-        //console.log(`summ:${summary}\ndur:${duration.toFixed(1)}hrs\norg:${organizer}\natt:${attendees}\nstat:${status}`)
+        if (event_status === 'CANCELLED' && organizer) {
+            console.log(`${summary}: ${organizer}, ${attendees}`);
+        }
 
         if (status !== 'DECLINED' && status !== 'NEEDS-ACTION' && event_status !== 'CANCELLED') {
-
             attendee_data.names.forEach(name => {
                 if (!data[name]) {
                     data[name] = {
@@ -128,6 +106,95 @@ function getAllPeople(events) {
 
     return data;
 }
+
+
+
+
+
+function showChart(peopleData) {
+    // Get the context of the canvas where the chart will be rendered
+    const ctx = document.getElementById('results-chart').getContext('2d');
+
+    // Extract names and hours for the chart
+    let names = Object.keys(peopleData);
+    let hours = names.map(name => peopleData[name]['hours_spent']);
+
+    // Find the index of the person with the maximum hours and remove the top person
+    const maxIndex = hours.indexOf(Math.max(...hours));
+    names.splice(maxIndex, 1);
+    hours.splice(maxIndex, 1);
+
+    // Sort the remaining entries by hours in descending order
+    const sortedIndices = hours.map((value, index) => index)
+                               .sort((a, b) => hours[b] - hours[a]);
+
+    // Keep only the top 10 entries
+    const topIndices = sortedIndices.slice(0, 10);
+    const filteredLabels = topIndices.map(index => names[index]);
+    const filteredData = topIndices.map(index => hours[index]);
+
+    // Increase the size of the chart by setting the canvas width and height
+    ctx.canvas.width = 900;  // Set the chart to 900x900 pixels
+    ctx.canvas.height = 900;
+
+    // Create a new Chart instance with the updated size and options
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: filteredLabels,
+            datasets: [{
+                data: filteredData,
+                backgroundColor: [
+                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', 
+                    '#FF9F40', '#FF6347', '#36A2EB', '#FFCE56', '#CCCCCC'
+                ],
+                hoverBackgroundColor: [
+                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', 
+                    '#FF9F40', '#FF6347', '#36A2EB', '#FFCE56', '#AAAAAA'
+                ],
+                borderWidth: 0 // Remove the white spaces between slices
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: false // Remove the legend
+                },
+                tooltip: {
+                    enabled: true,
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.raw || 0;
+                            return `${label}: ${value.toFixed(1)} hours`;
+                        }
+                    }
+                },
+                datalabels: {
+                    color: '#fff',  // Text color
+                    formatter: function(value, context) {
+                        const name = context.chart.data.labels[context.dataIndex];
+                        return `${name}`;
+                    },
+                    anchor: 'center',
+                    align: 'center',
+                    textAlign: 'center',
+                    font: {
+                        weight: 'bold',
+                        size: 8,
+                    },
+                }
+            }
+        },
+        plugins: [ChartDataLabels] // This plugin is required for the datalabels to work
+    });
+}
+
+
+
+
+
 
 function getEventStatus(event) {
     const data = event.component.jCal[1];

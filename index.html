@@ -6,6 +6,8 @@
     <title>Gcal Wrapped</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ical.js/1.4.0/ical.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- Include Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
 </head>
 <body>
     <div class="container">
@@ -34,7 +36,7 @@
     <!-- Separate Frame for Results -->
     <div class="results-frame" id="results-frame">
         <h2>Analysis Results</h2>
-        <pre id="results"></pre>
+        <canvas id="results-chart"></canvas> <!-- Replace pre with canvas -->
         <button id="back-button">Back to Upload</button>
     </div>
 
