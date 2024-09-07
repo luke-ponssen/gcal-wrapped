@@ -12,26 +12,42 @@
 <body>
     <div class="container">
         <h1>Gcal Wrapped</h1>
-        
+       
         <section id="instructions">
-            <h2>How to Download Your ICS File from Google Takeout</h2>
+            <h2>Get Your Data</h2>
             <ol>
                 <li>Visit <a href="https://takeout.google.com/" target="_blank">Google Takeout</a>.</li>
+                <li>Sign into the right account (the one with your Google Calendar).</li>
                 <li>Under "Select data to include", click "Deselect all".</li>
                 <li>Scroll down and check the box next to "Google Calendar".</li>
                 <li>Click "Next step" at the bottom of the page.</li>
-                <li>Choose your preferred export options and click "Create export".</li>
-                <li>Once the export is ready, download the archive file and extract it.</li>
-                <li>Inside the extracted folder, find the `.ics` file(s) for your calendar data.</li>
+                <li>
+                    Click "Create export" at the bottom of the page.
+                    <img src="images/img1.png" alt="img1" class="instruction-image1">
+                </li>
+                <li>
+                    Check the email you signed in with and click "Download your files". You might have to click on the link multiple times until you see the page below:
+                    <img src="images/img2.png" alt="img2" class="instruction-image2">
+                </li>
+                <li>Click "Download".</li>
+                <li>
+                    Navigate to your downloads folder, select the downloaded zip file (filename starts with "takeout-" followed by numbers), right-click the zip file, then click "Extract All...", and then after the pop up click "Extract".
+                    <img src="images/img3.png" alt="img3" class="instruction-image3">
+                </li>
+                <li>
+                    Now it's time to upload your file below. Click "Choose File", then in your downloads folder find the folder (not zip file) "takeout-XXXXX" and click into it. Click "Takeout" then click "Calendar" then double click the file with your email.
+                </li>
             </ol>
         </section>
 
-        <h2>Upload Your ICS File</h2>
+
+        <h2>Upload Your Data</h2>
         <form id="upload-form">
             <input type="file" id="ics-file" accept=".ics">
             <button type="submit">Analyze</button>
         </form>
     </div>
+
 
     <!-- Separate Frame for Results -->
     <div class="results-frame" id="results-frame">
@@ -40,12 +56,13 @@
         <button id="back-button">Back to Upload</button>
     </div>
 
+
     <!-- Loading Animation -->
     <div class="loading-animation" id="loading-animation">
         <div class="spinner"></div>
         <p>Stalking your gcal...</p>
     </div>
-    
+   
     <script src="script.js"></script>
 </body>
 </html>
