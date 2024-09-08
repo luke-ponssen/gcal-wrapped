@@ -1,8 +1,29 @@
+// Helper function to parse the nicknames input
+function parseNicknames(nicknameString) {
+    const nicknameMap = {};
+
+    // Split the input by semicolons to get each mapping
+    nicknameString.split(';').forEach(mapping => {
+        const [nicknames, realName] = mapping.split(':').map(str => str.trim());
+        if (nicknames && realName) {
+            // Split the nicknames by commas, trim them, and map them to the real name
+            nicknameMap[realName] = nicknames.split(',').map(nickname => nickname.trim());
+        }
+    });
+
+    return nicknameMap;
+}
+
 document.getElementById('upload-form').addEventListener('submit', function (event) {
     event.preventDefault();
 
+    // Get the file input
     const fileInput = document.getElementById('ics-file');
     const file = fileInput.files[0];
+
+    // Get the nicknames from the input field
+    const nicknamesInput = document.getElementById('nicknames-input');
+    const nicknameMap = parseNicknames(nicknamesInput.value); // Parse the nickname input
 
     if (file) {
         const reader = new FileReader();
@@ -14,14 +35,16 @@ document.getElementById('upload-form').addEventListener('submit', function (even
             const loadingAnimation = document.getElementById('loading-animation');
             loadingAnimation.style.display = 'flex';
 
+            // Set a maximum timeout for the loading screen (10 seconds)
+            const loadingTimeout = setTimeout(() => {
+                loadingAnimation.style.display = 'none';
+                alert('Error: The analysis took too long. Please try again later.');
+                document.querySelector('.container').style.display = 'block';
+            }, 10000); // 10 seconds
+
             // Delay to simulate the analysis duration
             setTimeout(() => {
-                analyzeICS(calendarData);
-                // Hide the loading animation
-                loadingAnimation.style.display = 'none';
-                // Show the results frame
-                const resultsFrame = document.getElementById('results-frame');
-                resultsFrame.style.display = 'block';
+                analyzeICS(calendarData, nicknameMap, loadingTimeout);  // Pass nicknames and timeout
             }, 2000); // Simulate the 2-second analysis duration
         };
         reader.readAsText(file);
@@ -38,7 +61,7 @@ document.getElementById('back-button').addEventListener('click', function () {
     resultsElement.textContent = '';
 });
 
-function analyzeICS(icsContent) {
+function analyzeICS(icsContent, nicknameMap, loadingTimeout) {
 
     const startTime = performance.now();
 
@@ -53,16 +76,33 @@ function analyzeICS(icsContent) {
     const now = new Date();
     const filteredEvents = events.filter(event => event.status !== "CANCELLED" && event.startDate.toJSDate() <= now);
 
-    // Display basic information
-    const peopleData = getAllPeople(filteredEvents);
-    showChart(peopleData); // Display chart instead of text
+    // Get people data
+    const peopleData = getAllPeople(filteredEvents, nicknameMap);
+
+    if (Object.keys(peopleData).length === 0) {
+        // If no people are found, stop the loading screen and show an error message
+        clearTimeout(loadingTimeout); // Clear the 10-second timeout
+        document.getElementById('loading-animation').style.display = 'none';
+        alert('No attendees found in this calendar.');
+        document.querySelector('.container').style.display = 'block';
+    } else {
+        // Clear the timeout because analysis is successful
+        clearTimeout(loadingTimeout);
+        // Hide the loading animation and show the results frame
+        document.getElementById('loading-animation').style.display = 'none';
+        const resultsFrame = document.getElementById('results-frame');
+        resultsFrame.style.display = 'block';
+
+        // Show the chart with the people data
+        showChart(peopleData);
+    }
 }
 
-function getAllPeople(events) {
+function getAllPeople(events, nicknameMap) {
     const data = {}; // Name: {aliases, hours_spent, hangouts_list}
-    
+
     events.forEach(event => {
-        const summary = event.summary;
+        const summary = event.summary.toLowerCase(); // Convert summary to lowercase for easier matching
         const description = event.description;
         const start = event.startDate.toJSDate();
         const end = event.endDate.toJSDate();
@@ -78,10 +118,6 @@ function getAllPeople(events) {
             return;
         }
 
-        if (event_status === 'CANCELLED' && organizer) {
-            console.log(`${summary}: ${organizer}, ${attendees}`);
-        }
-
         if (status !== 'DECLINED' && status !== 'NEEDS-ACTION' && event_status !== 'CANCELLED') {
             attendee_data.names.forEach(name => {
                 if (!data[name]) {
@@ -90,6 +126,22 @@ function getAllPeople(events) {
                         "hours_spent": 0,
                         "hangouts_list": []
                     };
+                }
+
+                // Check if any nickname from nicknameMap matches the event summary
+                const aliases = nicknameMap[name] || []; // Get aliases for the current name
+
+                aliases.forEach(alias => {
+                    if (summary.includes(alias.toLowerCase())) {
+                        // If an alias is found in the summary, add the alias to the data and update hours
+                        data[name]["aliases"].push(alias);
+                        data[name]["hours_spent"] += duration;
+                    }
+                });
+
+                // Add the original name to the aliases if not present
+                if (!data[name]["aliases"].includes(name)) {
+                    data[name]["aliases"].push(name);
                 }
 
                 data[name]["hours_spent"] += duration;
@@ -106,6 +158,7 @@ function getAllPeople(events) {
 
     return data;
 }
+
 
 
 
@@ -134,8 +187,8 @@ function showChart(peopleData) {
     const filteredData = topIndices.map(index => hours[index]);
 
     // Increase the size of the chart by setting the canvas width and height
-    ctx.canvas.width = 900;  // Set the chart to 900x900 pixels
-    ctx.canvas.height = 900;
+    ctx.canvas.width = 600;  // Set the chart to 900x900 pixels
+    ctx.canvas.height = 600;
 
     // Create a new Chart instance with the updated size and options
     new Chart(ctx, {
