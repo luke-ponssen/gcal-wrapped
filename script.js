@@ -14,12 +14,25 @@ function parseNicknames(nicknameString) {
     return nicknameMap;
 }
 
+function getNameFromEmail(email) {
+    const nameFromEmailPattern = /^([^@]+)@/;
+    const nameMatchFromEmail = nameFromEmailPattern.exec(email);
+    if (nameMatchFromEmail) {
+        return nameMatchFromEmail[1];
+    }
+    return null;
+}
+
 document.getElementById('upload-form').addEventListener('submit', function (event) {
     event.preventDefault();
 
     // Get the file input
     const fileInput = document.getElementById('ics-file');
     const file = fileInput.files[0];
+
+    // Get the email from the input field
+    const user_email = document.getElementById('email').value;
+    const user_name = getNameFromEmail(user_email);
 
     // Get the nicknames from the input field
     const nicknamesInput = document.getElementById('nicknames-input');
@@ -44,7 +57,7 @@ document.getElementById('upload-form').addEventListener('submit', function (even
 
             // Delay to simulate the analysis duration
             setTimeout(() => {
-                analyzeICS(calendarData, nicknameMap, loadingTimeout);  // Pass nicknames and timeout
+                analyzeICS(calendarData, nicknameMap, loadingTimeout, user_name, user_email);  // Pass nicknames and timeout
             }, 2000); // Simulate the 2-second analysis duration
         };
         reader.readAsText(file);
@@ -61,7 +74,7 @@ document.getElementById('back-button').addEventListener('click', function () {
     resultsElement.textContent = '';
 });
 
-function analyzeICS(icsContent, nicknameMap, loadingTimeout) {
+function analyzeICS(icsContent, nicknameMap, loadingTimeout, user_name, user_email) {
 
     const startTime = performance.now();
 
@@ -77,7 +90,7 @@ function analyzeICS(icsContent, nicknameMap, loadingTimeout) {
     const filteredEvents = events.filter(event => event.status !== "CANCELLED" && event.startDate.toJSDate() <= now);
 
     // Get people data
-    const peopleData = getAllPeople(filteredEvents, nicknameMap);
+    const peopleData = getAllPeople(filteredEvents, nicknameMap, user_email);
 
     if (Object.keys(peopleData).length === 0) {
         // If no people are found, stop the loading screen and show an error message
@@ -95,10 +108,11 @@ function analyzeICS(icsContent, nicknameMap, loadingTimeout) {
 
         // Show the chart with the people data
         showChart(peopleData);
+        showPcntOrganized(filteredEvents, user_name);
     }
 }
 
-function getAllPeople(events, nicknameMap) {
+function getAllPeople(events, nicknameMap, user_email) {
     const data = {}; // Name: {aliases, hours_spent, hangouts_list}
 
     events.forEach(event => {
@@ -110,11 +124,32 @@ function getAllPeople(events, nicknameMap) {
         const organizer = getNamesEmails(event, 'organizer').names.join('');
         const attendee_data = getNamesEmails(event, 'attendee');
         const attendees = attendee_data.names.join(', ');
-        const status = findStatus(event, 'lponssen@scu.edu');
+        const status = findStatus(event, user_email);
         const event_status = getEventStatus(event);
 
-        // Skip events that have no attendees
+        // If event has no attendees check for aliases
         if (attendee_data.names.length === 0) {
+            Object.entries(nicknameMap).forEach(([name, aliases]) => {
+                // Check if any alias from nicknameMap matches the event summary
+                aliases.forEach(alias => {
+                    // Create a regular expression that matches the alias as a whole word, case-insensitive
+                    const regex = new RegExp(`\\b${alias.toLowerCase()}\\b`, 'i');
+                    
+                    if (regex.test(summary)) {
+                        // If an alias is found in the summary, add the alias to the data and update hours
+                        if (!data[name]) {
+                            data[name] = {
+                                "aliases": [],
+                                "hours_spent": 0,
+                                "hangouts_list": []
+                            };
+                        }
+                        data[name]["aliases"].push(alias);
+                        data[name]["hours_spent"] += duration;
+                    }
+                });
+                
+            });
             return;
         }
 
@@ -127,17 +162,6 @@ function getAllPeople(events, nicknameMap) {
                         "hangouts_list": []
                     };
                 }
-
-                // Check if any nickname from nicknameMap matches the event summary
-                const aliases = nicknameMap[name] || []; // Get aliases for the current name
-
-                aliases.forEach(alias => {
-                    if (summary.includes(alias.toLowerCase())) {
-                        // If an alias is found in the summary, add the alias to the data and update hours
-                        data[name]["aliases"].push(alias);
-                        data[name]["hours_spent"] += duration;
-                    }
-                });
 
                 // Add the original name to the aliases if not present
                 if (!data[name]["aliases"].includes(name)) {
@@ -280,7 +304,6 @@ function findStatus(event, targetCn) {
 }
 
 function getNamesEmails(event, type) {
-    const nameFromEmailPattern = /^([^@]+)@/;
 
     // Ensure event.component.jCal[1] is an array
     const data = event.component.jCal[1];
@@ -303,10 +326,8 @@ function getNamesEmails(event, type) {
                 const email = attendee['cn'];
                 if (email) {
                     emails.add(email);
-
-                    const nameMatchFromEmail = nameFromEmailPattern.exec(email);
-                    if (nameMatchFromEmail) {
-                        const name = nameMatchFromEmail[1];
+                    const name = getNameFromEmail(email);
+                    if (email) {
                         names.add(name)
                     }
                 }
@@ -338,4 +359,55 @@ function show(data, n = 1000, verbose = false) {
     });
 
     return output;
+}
+
+function showPcntOrganized(events, user_name, n = 2) {
+    let totalEvents = 0;
+    let eventsOrganized = 0;
+    let totalSmallEvents = 0;
+    let smallEventsOrganized = 0;
+
+    events.forEach(event => {
+
+        const summary = event.summary.toLowerCase(); // Convert summary to lowercase for easier matching
+        const description = event.description;
+        const start = event.startDate.toJSDate();
+        const end = event.endDate.toJSDate();
+        const duration = (end - start) / 3600000; // Duration in hours
+        const organizer = getNamesEmails(event, 'organizer').names.join('');
+        const attendee_data = getNamesEmails(event, 'attendee');
+        const attendees = attendee_data.names.join(', ');
+        const status = findStatus(event, 'lponssen@scu.edu');
+        const event_status = getEventStatus(event);
+
+        if (organizer === user_name && attendee_data.names.length > 0) {
+            eventsOrganized++;
+            totalEvents++;
+        } else if (organizer !== user_name && attendee_data.names.length > 0) {
+            totalEvents++;
+        }
+
+        if (organizer === user_name && attendee_data.names.length > 0 && attendee_data.names.length <= n) {
+            smallEventsOrganized++;
+            totalSmallEvents++;
+        } else if (organizer !== user_name && attendee_data.names.length > 0 && attendee_data.names.length <= n) {
+            totalSmallEvents++;
+        }
+    });
+
+    let pcnt = 0, pcntSmall = 0;
+    if (totalEvents > 0) {
+        pcnt = (100.0 * eventsOrganized / totalEvents).toFixed(2);
+    }
+    if (totalSmallEvents > 0) {
+        pcntSmall = (100.0 * smallEventsOrganized / totalSmallEvents).toFixed(2);
+    }
+
+    // Display the result below the chart
+    const resultDiv = document.getElementById('pcnt-organized');
+    if (n === 2) {
+        resultDiv.innerHTML = `You initiated <strong>${pcnt}%</strong> of all your hangouts and <strong>${pcntSmall}%</strong> of your 1:1 hangouts.`;
+    } else {
+        resultDiv.innerHTML = `You initiated <strong>${pcnt}%</strong> of all your hangouts and <strong>${pcntSmall}%</strong> of your small hangouts (size ${n} or less).`;
+    }
 }
